@@ -258,7 +258,7 @@ En `Program.cs` se encuentra configurado un middleware centralizado mediante `ap
 ## Base de Datos y Migraciones
 
 - **Motor**: Azure SQL Database.
-- **Conexion**. Configura `ConnectionStrings__DefaultConnection` como variable de entorno con la cadena de Azure SQL. En desarrollo tambien puedes guardar `ConnectionStrings:DefaultConnection` en los secretos de usuario del proyecto `src/Bitacora.Api`.
+- **Conexion**. En desarrollo, crea `appsettings.Local.json` en la raiz del repositorio con el formato de abajo. Git excluye este archivo. Para Cloud Run, configura `ConnectionStrings__DefaultConnection` y `JwtSettings__Secret` mediante Secret Manager.
 - **Acceso**. Autoriza en Azure SQL la IP desde donde aplicaras la migracion y configura el acceso de red del entorno donde se ejecutara la API. Configura tambien `JwtSettings__Secret` para iniciar la API en ese entorno.
 - **Mapeo**: Realizado a traves de `ApplicationDbContext` aplicando las siguientes restricciones en `OnModelCreating`:
   - `Id`: Clave primaria de la tabla.
@@ -266,6 +266,17 @@ En `Program.cs` se encuentra configurado un middleware centralizado mediante `ap
   - `Descripcion`: Requerido, longitud maxima de 500 caracteres.
   - `FotoBase64`: Campo de texto de longitud flexible.
   - `FechaCreacion`: Requerido.
+
+```json
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "<cadena de Azure SQL>"
+  },
+  "JwtSettings": {
+    "Secret": "<clave privada de al menos 32 bytes>"
+  }
+}
+```
 
 ### Gestion de Migraciones con EF Core CLI
 
