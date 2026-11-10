@@ -1,0 +1,9 @@
+**
+!src/
+!src/**
+**/bin/
+**/obj/
+**/*.db
+**/*.db-*
+**/.env*
+**/secrets.json

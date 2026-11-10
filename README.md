@@ -1,6 +1,6 @@
 # Bitacora API - UTH
 
-API REST para la gestion de registros de bitacora de campo, desarrollada con ASP.NET Core y Entity Framework Core sobre SQLite, aplicando principios de Arquitectura Limpia (Clean Architecture).
+API REST para la gestion de registros de bitacora de campo, desarrollada con ASP.NET Core y Entity Framework Core sobre Azure SQL Database, aplicando principios de Arquitectura Limpia (Clean Architecture).
 
 ---
 
@@ -35,7 +35,7 @@ La solucion sigue una separacion de responsabilidades en cuatro proyectos interc
 
 1. **Bitacora.Domain**: El nucleo del sistema. No tiene dependencias de librerias externas ni de otros proyectos de la solucion. Define las entidades puras de la logica de negocio.
 2. **Bitacora.Application**: Contiene los contratos de interfaces, los modelos de transferencia de datos (DTOs) y las reglas de validacion semanticas. Depende unicamente de `Bitacora.Domain`.
-3. **Bitacora.Infrastructure**: Encargada del acceso a datos, implementacion del patron repositorio y mapeo objeto-relacional mediante Entity Framework Core sobre SQLite. Depende de `Bitacora.Domain` y `Bitacora.Application`.
+3. **Bitacora.Infrastructure**: Encargada del acceso a datos, implementacion del patron repositorio y mapeo objeto-relacional mediante Entity Framework Core sobre Azure SQL Database. Depende de `Bitacora.Domain` y `Bitacora.Application`.
 4. **Bitacora.Api**: Capa de presentacion HTTP. Contiene los controladores REST, configuracion de inyeccion de dependencias, middlewares y documentacion interactiva OpenAPI/Swagger. Depende de `Bitacora.Application` y `Bitacora.Infrastructure`.
 
 ---
@@ -68,8 +68,8 @@ Tarea2.2_ApiRest_BitacoraUTH/
     |   |-- Data/
     |   |   |-- ApplicationDbContext.cs           # Contexto de base de datos EF Core
     |   |   `-- Migrations/                       # Migraciones versionadas de EF Core
-    |   |       |-- 20261104022342_InitialCreate.cs
-    |   |       |-- 20261104022342_InitialCreate.Designer.cs
+    |   |       |-- 20261110182619_InitialAzureSql.cs
+    |   |       |-- 20261110182619_InitialAzureSql.Designer.cs
     |   |       `-- ApplicationDbContextModelSnapshot.cs
     |   `-- Repositories/
     |       `-- RegistroRepository.cs             # Implementacion del repositorio
@@ -78,9 +78,8 @@ Tarea2.2_ApiRest_BitacoraUTH/
         |-- Bitacora.Api.csproj
         |-- Bitacora.Api.http                     # Peticiones de prueba para clientes HTTP
         |-- Program.cs                            # Inicializacion y pipeline de la aplicacion
-        |-- appsettings.json                      # Configuracion base (cadena de conexion)
+        |-- appsettings.json                      # Configuracion base
         |-- appsettings.Development.json          # Configuracion de desarrollo
-        |-- bitacora.db                           # Archivo de base de datos SQLite local
         |-- Controllers/
         |   |-- RegistrosController.cs            # Controlador CRUD de registros
         |   `-- WeatherForecastController.cs      # Controlador de plantilla base
@@ -258,8 +257,9 @@ En `Program.cs` se encuentra configurado un middleware centralizado mediante `ap
 
 ## Base de Datos y Migraciones
 
-- **Motor**: SQLite.
-- **Cadena de conexion**: Configurada en `appsettings.json` como `"Data Source=bitacora.db"`.
+- **Motor**: Azure SQL Database.
+- **Conexion**. Configura `ConnectionStrings__DefaultConnection` como variable de entorno con la cadena de Azure SQL. En desarrollo tambien puedes guardar `ConnectionStrings:DefaultConnection` en los secretos de usuario del proyecto `src/Bitacora.Api`.
+- **Acceso**. Autoriza en Azure SQL la IP desde donde aplicaras la migracion y configura el acceso de red del entorno donde se ejecutara la API. Configura tambien `JwtSettings__Secret` para iniciar la API en ese entorno.
 - **Mapeo**: Realizado a traves de `ApplicationDbContext` aplicando las siguientes restricciones en `OnModelCreating`:
   - `Id`: Clave primaria de la tabla.
   - `Titulo`: Requerido, longitud maxima de 100 caracteres.
@@ -272,7 +272,7 @@ En `Program.cs` se encuentra configurado un middleware centralizado mediante `ap
 Para aplicar las migraciones existentes o crear nuevas:
 
 ```bash
-# Aplicar migraciones a la base de datos SQLite
+# Crear las tablas Usuarios y Registros en Azure SQL
 dotnet ef database update --project src/Bitacora.Infrastructure --startup-project src/Bitacora.Api
 
 # Crear una nueva migracion
@@ -285,9 +285,9 @@ dotnet ef migrations add NombreMigracion --project src/Bitacora.Infrastructure -
 
 - **SDK de .NET**: Version 10.0 (o superior).
 - **Lenguaje**: C# 13 / C# 14.
-- **Entity Framework Core**: Version 10.0.14 (`Microsoft.EntityFrameworkCore.Sqlite`, `Microsoft.EntityFrameworkCore.Design`).
+- **Entity Framework Core**: Version 10.0.14 (`Microsoft.EntityFrameworkCore.SqlServer`, `Microsoft.EntityFrameworkCore.Design`).
 - **Documentacion de API**: `Microsoft.AspNetCore.OpenApi` v10.0.12 y `Swashbuckle.AspNetCore.SwaggerUI` v10.3.1.
-- **Gestor de Base de Datos**: SQLite.
+- **Gestor de Base de Datos**: Azure SQL Database.
 
 ---
 
@@ -313,6 +313,8 @@ dotnet build
 ```
 
 ### 4. Ejecutar el proyecto API
+
+Configura la conexion y aplica la migracion segun la seccion [Base de Datos y Migraciones](#base-de-datos-y-migraciones).
 
 ```bash
 dotnet run --project src/Bitacora.Api
@@ -371,7 +373,7 @@ Para utilizarlas, importe la coleccion en Postman y configure la variable de ent
     participant Repo as 🛡️ RegistroRepository
     participant Retrofit as 🌐 RetrofitClient
     participant API as 💻 API .NET 10
-    participant DB as 🗄️ SQLite DB
+    participant DB as 🗄️ Azure SQL
 
     Usuario->>UI: Toca "+ Capturar en Campo"
     UI->>UI: Procesa Foto (Base64) + Dictado por Voz
