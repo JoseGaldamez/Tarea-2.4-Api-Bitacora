@@ -1,10 +1,14 @@
+using System.Security.Claims;
 using Bitacora.Application.DTOs;
 using Bitacora.Application.Interfaces;
 using Bitacora.Domain.Entities;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Bitacora.Api.Controllers;
 
+[Authorize] // Exige autenticación por defecto para todos los endpoints del controlador
 [ApiController]
 [Route("api/registros")]
 public sealed class RegistrosController(IRegistroRepository repository) : ControllerBase
@@ -43,23 +47,30 @@ public sealed class RegistrosController(IRegistroRepository repository) : Contro
             r.Titulo,
             r.Descripcion,
             !string.IsNullOrEmpty(r.FotoBase64),
-            r.FotoBase64, // Aquí sí se incluye la foto completa
+            r.FotoBase64,
             r.FechaCreacion
         );
 
         return Ok(response);
     }
 
-    // POST: /api/registros (Crear un registro)
+    // POST: /api/registros (Crear un registro asignando el usuario autenticado)
     [HttpPost]
     public async Task<IActionResult> Crear([FromBody] CrearRegistroRequest request, CancellationToken cancellationToken)
     {
+        var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(userIdString) || !int.TryParse(userIdString, out var userId))
+        {
+            return Unauthorized(new { message = "Token inválido o usuario no identificado." });
+        }
+
         var registro = new Registro
         {
             Titulo = request.Titulo,
             Descripcion = request.Descripcion,
             FotoBase64 = request.FotoBase64,
-            FechaCreacion = DateTimeOffset.UtcNow // Asignada por el servidor
+            FechaCreacion = DateTimeOffset.UtcNow, // Asignada por el servidor
+            UsuarioId = userId // Se enlaza con el usuario logueado
         };
 
         await repository.CrearAsync(registro, cancellationToken);
@@ -76,7 +87,7 @@ public sealed class RegistrosController(IRegistroRepository repository) : Contro
         return CreatedAtAction(nameof(ObtenerPorId), new { id = registro.Id }, response);
     }
 
-    // PUT: /api/registros/{id} (Actualizar un registro)
+    // PUT: /api/registros/{id} (Actualizar con validación de propiedad)
     [HttpPut("{id:int}")]
     public async Task<IActionResult> Actualizar(int id, [FromBody] ActualizarRegistroRequest request, CancellationToken cancellationToken)
     {
@@ -86,17 +97,32 @@ public sealed class RegistrosController(IRegistroRepository repository) : Contro
             return NotFound();
         }
 
+        var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var userRole = User.FindFirstValue(ClaimTypes.Role);
+
+        if (string.IsNullOrEmpty(userIdString) || !int.TryParse(userIdString, out var userId))
+        {
+            return Unauthorized(new { message = "Token inválido o usuario no identificado." });
+        }
+
+        // Regla de negocio: Si no es Admin y no es el dueño del registro, retornar 403 Forbidden
+        if (userRole != "Admin" && existente.UsuarioId != userId)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "No tienes permisos para modificar un registro que no te pertenece." });
+        }
+
         existente.Titulo = request.Titulo;
         existente.Descripcion = request.Descripcion;
         existente.FotoBase64 = request.FotoBase64;
 
         await repository.ActualizarAsync(existente, cancellationToken);
 
-        return NoContent(); // 204 No Content o 200 OK
+        return NoContent(); // 204 No Content
     }
 
-    // DELETE: /api/registros/{id} (Eliminar un registro)
+    // DELETE: /api/registros/{id} (Eliminar solo permitido para administradores)
     [HttpDelete("{id:int}")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> Eliminar(int id, CancellationToken cancellationToken)
     {
         var existente = await repository.ObtenerPorIdAsync(id, cancellationToken);

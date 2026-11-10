@@ -6,6 +6,7 @@ namespace Bitacora.Infrastructure.Data;
 public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : DbContext(options)
 {
     public DbSet<Registro> Registros => Set<Registro>();
+    public DbSet<Usuario> Usuarios => Set<Usuario>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -18,6 +19,12 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             entity.Property(e => e.Descripcion).IsRequired().HasMaxLength(500);
             entity.Property(e => e.FotoBase64);
             entity.Property(e => e.FechaCreacion).IsRequired();
+
+            // Usamos 'entity' directamente en lugar de repetir modelBuilder.Entity<Registro>()
+            entity.HasOne(r => r.Usuario)
+                  .WithMany(u => u.Registros)
+                  .HasForeignKey(r => r.UsuarioId)
+                  .OnDelete(DeleteBehavior.Restrict);
         });
     }
 }

@@ -1,37 +1,63 @@
+using System.Text;
 using Bitacora.Application.Interfaces;
 using Bitacora.Infrastructure.Data;
 using Bitacora.Infrastructure.Repositories;
+using Bitacora.Infrastructure.Services;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// 1. Agregar controladores y OpenAPI/Swagger
+// 1. Controladores y OpenAPI nativo de .NET 10
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddOpenApi(); // OpenAPI nativo en .NET 10
+builder.Services.AddOpenApi();
 
-// 2. Registrar el DbContext con SQLite
+// 2. Base de datos SQLite
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-// 3. Registrar el Repositorio para la Inyección de Dependencias
+// 3. Repositorios y Servicios (Clean Architecture)
 builder.Services.AddScoped<IRegistroRepository, RegistroRepository>();
+builder.Services.AddScoped<IUsuarioRepository, UsuarioRepository>();
+builder.Services.AddScoped<ITokenService, JwtTokenService>();
 
-var builderApp = builder.Build();
+// 4. Configuración de Autenticación JWT
+var jwtSettings = builder.Configuration.GetSection("JwtSettings");
+var secretKey = jwtSettings["Secret"] ?? throw new InvalidOperationException("JWT Secret is missing.");
 
-var app = builderApp;
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+})
+.AddJwtBearer(options =>
+{
+    options.TokenValidationParameters = new TokenValidationParameters
+    {
+        ValidateIssuer = true,
+        ValidateAudience = true,
+        ValidateLifetime = true,
+        ValidateIssuerSigningKey = true,
+        ValidIssuer = jwtSettings["Issuer"],
+        ValidAudience = jwtSettings["Audience"],
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey)),
+        ClockSkew = TimeSpan.Zero
+    };
+});
 
-// 4. Configurar el pipeline HTTP
+builder.Services.AddAuthorization();
+
+var app = builder.Build();
+
+// 5. Pipeline HTTP
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
-    app.UseSwaggerUI(options =>
-    {
-        options.SwaggerEndpoint("/openapi/v1.json", "Bitacora API v1");
-    });
 }
 
-// Manejo global de excepciones nativo en ASP.NET Core
+// Manejo global de excepciones (ProblemDetails)
 app.UseExceptionHandler(exceptionHandlerApp =>
 {
     exceptionHandlerApp.Run(async context =>
@@ -43,7 +69,7 @@ app.UseExceptionHandler(exceptionHandlerApp =>
         {
             Status = StatusCodes.Status500InternalServerError,
             Title = "Ocurrió un error inesperado en el servidor.",
-            Detail = "Por favor, inténtelo más tarde o contacte al administrador."
+            Detail = "Por favor, inténtelo más tarde."
         };
 
         await context.Response.WriteAsJsonAsync(problemDetails);
@@ -52,8 +78,9 @@ app.UseExceptionHandler(exceptionHandlerApp =>
 
 app.UseHttpsRedirection();
 
+// Orden crítico para seguridad
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
-
 app.Run();
